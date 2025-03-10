@@ -3,21 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Swap Webcam Feed</title>
+    <title>Webcam Stream</title>
 </head>
 <body>
-    <h1>Upload Image for Face Swap</h1>
-    <form method="POST" enctype="multipart/form-data" action="/upload">
-        <input type="file" name="file" accept="image/*">
-        <button type="submit">Upload</button>
-    </form>
+    <h1>Webcam Feed</h1>
+    <video id="video" width="640" height="480" autoplay></video>
+    <br><br>
+    <h2>Processed Webcam Feed</h2>
+    <img id="processed" width="640" height="480">
 
-    {% if filename %}
-        <h2>Uploaded Image:</h2>
-        <img src="{{ url_for('uploaded_file', filename=filename) }}" alt="Uploaded Image" width="300">
-    {% endif %}
+    <script>
+        const video = document.getElementById("video");
+        const processedImg = document.getElementById("processed");
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
 
-    <h1>Webcam Feed with Face Swap</h1>
-    <img src="{{ url_for('webcam_feed') }}" alt="Webcam Feed" width="640">
+        // Access the webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then((stream) => {
+                video.srcObject = stream;
+            })
+            .catch((error) => {
+                console.error("Error accessing webcam: ", error);
+            });
+
+        // Capture frames every 100ms and send to the backend
+        setInterval(() => {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append("frame", blob, "frame.jpg");
+
+                // Send frame to Flask backend
+                const response = await fetch("/process_frame", {
+                    method: "POST",
+                    body: formData
+                });
+
+                // Receive processed image
+                if (response.ok) {
+                    const processedBlob = await response.blob();
+                    const processedURL = URL.createObjectURL(processedBlob);
+                    processedImg.src = processedURL;
+                }
+            }, "image/jpeg");
+        }, 100);
+    </script>
 </body>
 </html>
