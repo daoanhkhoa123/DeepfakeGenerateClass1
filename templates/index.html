@@ -3,132 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webcam Face Swap</title>
+    <title>Face Swap Web App</title>
     <style>
-        video {
-            width: 100%;
-            max-width: 500px;
-            border: 2px solid #ccc;
+        #webcam {
+            width: 640px;
+            height: 480px;
         }
-        #uploadedImage {
-            width: 100%;
-            max-width: 500px;
-            display: block;
+        #upload-btn {
             margin-top: 20px;
-            border: 2px solid #ccc;
         }
-        #processedFrame {
-            width: 100%;
-            max-width: 500px;
-            display: block;
-            margin-top: 20px;
-            border: 2px solid #ccc;
+        #status {
+            margin-top: 10px;
         }
     </style>
 </head>
 <body>
+    <h1>Face Swap Web App</h1>
 
-    <h1>Webcam Face Swap</h1>
+    <!-- Webcam Display -->
+    <video id="webcam" autoplay></video>
 
-    <div>
-        <h3>Webcam View:</h3>
-        <video id="webcam" autoplay></video>
-    </div>
+    <br>
 
-    <div>
-        <h3>Upload Face Image:</h3>
-        <input type="file" id="uploadFace" accept="image/*" />
-    </div>
+    <!-- Image Upload Form -->
+    <input type="file" id="upload" accept="image/*" />
+    <button id="upload-btn">Upload Image</button>
 
-    <div>
-        <h3>Uploaded Face Image:</h3>
-        <img id="uploadedImage" src="" alt="Uploaded Face" />
-    </div>
-
-    <div>
-        <h3>Processed Frame:</h3>
-        <img id="processedFrame" src="" alt="Processed Frame">
-    </div>
+    <div id="status"></div>
 
     <script>
-        const video = document.getElementById('webcam');
-        const processedFrame = document.getElementById('processedFrame');
-        const uploadedImage = document.getElementById('uploadedImage');
-        const uploadFace = document.getElementById('uploadFace');
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        let streaming = false;
-        let uploadedFaceData = null;
+        // Access webcam feed
+        const webcam = document.getElementById("webcam");
+        const uploadBtn = document.getElementById("upload-btn");
+        const uploadInput = document.getElementById("upload");
+        const statusDiv = document.getElementById("status");
 
-        // Set up the webcam stream
-        navigator.mediaDevices.getUserMedia({ video: true })
-            .then(stream => {
-                video.srcObject = stream;
-                video.onplay = () => { streaming = true; };
-            })
-            .catch(err => {
-                console.error("Error accessing webcam: ", err);
-            });
-
-        // Capture frame and send to the server for processing
-        function captureAndSendFrame() {
-            if (!streaming) return;
-
-            // Draw the current video frame to the canvas
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // Convert canvas to image data (base64)
-            const webcamFrameData = canvas.toDataURL('image/jpeg');
-
-            // Send both the webcam frame and uploaded face to the server for processing
-            fetch('http://localhost:8012/process_frame', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    image: webcamFrameData,
-                    uploaded_face: uploadedFaceData || null // If no uploaded face, send null
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Update the image with the processed face-swapped frame
-                processedFrame.src = data.processed_image;
-
-                // Switch to processed frame, hide webcam view
-                video.style.display = "none"; // Hide webcam view
-                processedFrame.style.display = "block"; // Show processed frame
-            });
-
-            // Call captureAndSendFrame every 100ms (for smooth frame rate)
-            setTimeout(captureAndSendFrame, 100);
+        // Start webcam
+        async function startWebcam() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            webcam.srcObject = stream;
         }
 
-        // Handle face image upload
-        uploadFace.addEventListener('change', event => {
-            const file = event.target.files[0];
-            if (!file) return;
+        startWebcam();
 
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                uploadedFaceData = reader.result;
+        // Upload Image
+        uploadBtn.addEventListener("click", async () => {
+            const file = uploadInput.files[0];
+            if (!file) {
+                alert("Please select an image first!");
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', file);
 
-                // Display the uploaded image before face swapping
-                uploadedImage.src = uploadedFaceData;
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
 
-                // Show webcam view again after image upload
-                video.style.display = "block"; // Show webcam view
-                processedFrame.style.display = "none"; // Hide processed frame
-
-                // Start face swapping once an image is uploaded
-                captureAndSendFrame();
-            };
-            reader.readAsDataURL(file);
+                const result = await response.json();
+                if (result.error) {
+                    statusDiv.textContent = "Error: " + result.error;
+                } else {
+                    statusDiv.textContent = "Image uploaded and processed!";
+                }
+            } catch (error) {
+                statusDiv.textContent = "Error uploading image!";
+            }
         });
-    </script>
 
+        // Function to continuously fetch webcam frames (to implement face swapping logic)
+        async function getWebcamFeed() {
+            try {
+                const response = await fetch('/webcam_feed');
+                const frameBlob = await response.blob();
+                const frameUrl = URL.createObjectURL(frameBlob);
+                webcam.src = frameUrl;
+            } catch (error) {
+                console.error("Error fetching webcam feed:", error);
+            }
+        }
+
+        // Fetch webcam feed periodically
+        setInterval(getWebcamFeed, 100);
+
+    </script>
 </body>
 </html>
