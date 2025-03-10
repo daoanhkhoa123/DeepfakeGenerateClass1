@@ -14,9 +14,7 @@ app = Flask(__name__)
 face_analysis = insightface.app.FaceAnalysis(name='buffalo_l')
 face_analysis.prepare(ctx_id=0, det_size=(640, 640))
 
-swapper = insightface.model_zoo.get_model('inswapper_128.onnx',
-                                          download=False,
-                                          download_zip=False)
+swapper = insightface.model_zoo.get_model('inswapper_128.onnx', download=False, download_zip=False)
 
 def process_image(image_data, uploaded_face_data=None):
     # Convert base64 string to image
@@ -55,4 +53,4 @@ def process_frame():
     })
 
 if __name__ == "__main__":
-    app.run(port= 8012, debug=True)
+    app.run(port=8012, debug=True)
