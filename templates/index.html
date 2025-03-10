@@ -17,6 +17,13 @@
             margin-top: 20px;
             border: 2px solid #ccc;
         }
+        #processedFrame {
+            width: 100%;
+            max-width: 500px;
+            display: block;
+            margin-top: 20px;
+            border: 2px solid #ccc;
+        }
     </style>
 </head>
 <body>
@@ -38,8 +45,14 @@
         <img id="uploadedImage" src="" alt="Uploaded Face" />
     </div>
 
+    <div>
+        <h3>Processed Frame:</h3>
+        <img id="processedFrame" src="" alt="Processed Frame">
+    </div>
+
     <script>
         const video = document.getElementById('webcam');
+        const processedFrame = document.getElementById('processedFrame');
         const uploadedImage = document.getElementById('uploadedImage');
         const uploadFace = document.getElementById('uploadFace');
         const canvas = document.createElement('canvas');
@@ -59,7 +72,7 @@
 
         // Capture frame and send to the server for processing
         function captureAndSendFrame() {
-            if (!streaming || !uploadedFaceData) return;
+            if (!streaming) return;
 
             // Draw the current video frame to the canvas
             canvas.width = video.videoWidth;
@@ -77,25 +90,17 @@
                 },
                 body: JSON.stringify({
                     image: webcamFrameData,
-                    uploaded_face: uploadedFaceData
+                    uploaded_face: uploadedFaceData || null // If no uploaded face, send null
                 })
             })
             .then(response => response.json())
             .then(data => {
                 // Update the image with the processed face-swapped frame
-                const processedImage = new Image();
-                processedImage.src = data.processed_image;
+                processedFrame.src = data.processed_image;
 
-                processedImage.onload = function() {
-                    // Replace the webcam feed with the processed face-swapped image
-                    video.style.display = "none"; // Hide webcam
-                    const processedCanvas = document.createElement('canvas');
-                    const processedCtx = processedCanvas.getContext('2d');
-                    processedCanvas.width = processedImage.width;
-                    processedCanvas.height = processedImage.height;
-                    processedCtx.drawImage(processedImage, 0, 0);
-                    document.body.appendChild(processedCanvas); // Add the canvas to the page
-                };
+                // Switch to processed frame, hide webcam view
+                video.style.display = "none"; // Hide webcam view
+                processedFrame.style.display = "block"; // Show processed frame
             });
 
             // Call captureAndSendFrame every 100ms (for smooth frame rate)
@@ -113,6 +118,10 @@
 
                 // Display the uploaded image before face swapping
                 uploadedImage.src = uploadedFaceData;
+
+                // Show webcam view again after image upload
+                video.style.display = "block"; // Show webcam view
+                processedFrame.style.display = "none"; // Hide processed frame
 
                 // Start face swapping once an image is uploaded
                 captureAndSendFrame();
