@@ -10,7 +10,7 @@
             max-width: 500px;
             border: 2px solid #ccc;
         }
-        #processedFrame {
+        #uploadedImage {
             width: 100%;
             max-width: 500px;
             display: block;
@@ -34,13 +34,13 @@
     </div>
 
     <div>
-        <h3>Processed Frame:</h3>
-        <img id="processedFrame" src="" alt="Processed Frame">
+        <h3>Uploaded Face Image:</h3>
+        <img id="uploadedImage" src="" alt="Uploaded Face" />
     </div>
 
     <script>
         const video = document.getElementById('webcam');
-        const processedFrame = document.getElementById('processedFrame');
+        const uploadedImage = document.getElementById('uploadedImage');
         const uploadFace = document.getElementById('uploadFace');
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -82,8 +82,20 @@
             })
             .then(response => response.json())
             .then(data => {
-                // Update the image with the processed frame
-                processedFrame.src = data.processed_image;
+                // Update the image with the processed face-swapped frame
+                const processedImage = new Image();
+                processedImage.src = data.processed_image;
+
+                processedImage.onload = function() {
+                    // Replace the webcam feed with the processed face-swapped image
+                    video.style.display = "none"; // Hide webcam
+                    const processedCanvas = document.createElement('canvas');
+                    const processedCtx = processedCanvas.getContext('2d');
+                    processedCanvas.width = processedImage.width;
+                    processedCanvas.height = processedImage.height;
+                    processedCtx.drawImage(processedImage, 0, 0);
+                    document.body.appendChild(processedCanvas); // Add the canvas to the page
+                };
             });
 
             // Call captureAndSendFrame every 100ms (for smooth frame rate)
@@ -98,7 +110,12 @@
             const reader = new FileReader();
             reader.onloadend = () => {
                 uploadedFaceData = reader.result;
-                captureAndSendFrame();  // Start face swapping once an image is uploaded
+
+                // Display the uploaded image before face swapping
+                uploadedImage.src = uploadedFaceData;
+
+                // Start face swapping once an image is uploaded
+                captureAndSendFrame();
             };
             reader.readAsDataURL(file);
         });
