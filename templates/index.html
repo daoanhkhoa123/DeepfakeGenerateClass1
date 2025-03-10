@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webcam Stream</title>
+    <title>Webcam Face Swap</title>
 </head>
 <body>
     <h1>Webcam Feed</h1>
@@ -12,42 +12,79 @@
     <h2>Processed Webcam Feed</h2>
     <img id="processed" width="640" height="480">
 
-    <script>
-        const video = document.getElementById("video");
-        const processedImg = document.getElementById("processed");
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
+    <h2>Upload an Image</h2>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" id="imageFile" name="image" accept="image/*">
+        <button type="submit">Upload Image</button>
+    </form>
 
-        // Access the webcam
+    <script>
+        const video = document.getElementById('video');
+        const processedImage = document.getElementById('processed');
+        const uploadForm = document.getElementById('uploadForm');
+        const imageFileInput = document.getElementById('imageFile');
+
+        // Access webcam and stream to the video element
         navigator.mediaDevices.getUserMedia({ video: true })
-            .then((stream) => {
+            .then(stream => {
                 video.srcObject = stream;
             })
-            .catch((error) => {
-                console.error("Error accessing webcam: ", error);
+            .catch(err => {
+                console.error("Error accessing webcam: ", err);
             });
 
-        // Capture frames every 100ms and send to the backend
+        // Send webcam frame to the backend
+        function sendFrameToBackend(frame) {
+            const formData = new FormData();
+            formData.append("frame", frame, "frame.jpg");
+
+            fetch('/process_frame', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                processedImage.src = url;
+            })
+            .catch(err => {
+                console.error("Error processing frame: ", err);
+            });
+        }
+
+        // Capture frame every 100ms and send to backend
         setInterval(() => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob(async (blob) => {
-                const formData = new FormData();
-                formData.append("frame", blob, "frame.jpg");
-
-                // Send frame to Flask backend
-                const response = await fetch("/process_frame", {
-                    method: "POST",
-                    body: formData
-                });
-
-                // Receive processed image
-                if (response.ok) {
-                    const processedBlob = await response.blob();
-                    const processedURL = URL.createObjectURL(processedBlob);
-                    processedImg.src = processedURL;
-                }
-            }, "image/jpeg");
+            canvas.toBlob(sendFrameToBackend);
         }, 100);
+
+        // Handle image upload form submission
+        uploadForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const file = imageFileInput.files[0];
+            const formData = new FormData();
+            formData.append("image", file);
+
+            fetch('/upload_image', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.image_url) {
+                    console.log("Image uploaded successfully:", data.image_url);
+                } else {
+                    console.error("Upload error:", data.error);
+                }
+            })
+            .catch(err => {
+                console.error("Error uploading image: ", err);
+            });
+        });
     </script>
 </body>
 </html>
