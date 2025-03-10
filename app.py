@@ -1,83 +1,62 @@
 import os
+from flask import Flask, render_template, request, send_file
 import cv2
-import insightface
-from flask import Flask, request, render_template, send_from_directory, Response
+import numpy as np
 from werkzeug.utils import secure_filename
+from io import BytesIO
 
 app = Flask(__name__)
 
-# Configure upload folder and allowed file extensions
-UPLOAD_FOLDER = 'uploads/'
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
-
+# Define upload folder
+UPLOAD_FOLDER = 'uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Initialize FaceAnalysis and Face Swapper from InsightFace
-face_analysis = insightface.app.FaceAnalysis(name='buffalo_l')
-face_analysis.prepare(ctx_id=0, det_size=(640, 640))
-swapper = insightface.model_zoo.get_model('inswapper_128.onnx', download=False, download_zip=False)
+# Make sure the upload folder exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Check for allowed file types
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# Function to preprocess the frame (e.g., convert to grayscale)
+def preprocess_frame(frame):
+    # Convert frame to grayscale as an example preprocessing step
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    # Convert the grayscale frame back to a color (3 channels) for display
+    color_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2BGR)
+    return color_frame
 
-# Route to handle image uploads
-@app.route('/upload', methods=['POST'])
-def upload_image():
-    if 'file' not in request.files:
-        return "No file part"
-    file = request.files['file']
-    if file.filename == '':
-        return "No selected file"
-    
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-        return render_template('index.html', filename=filename)
-
-# Route to serve uploaded image
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
-# Function to generate frames for webcam feed with face swap
-def generate_frames():
-    cap = cv2.VideoCapture(0)  # Open the default webcam
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        
-        # Load the uploaded image for face swapping (if available)
-        uploaded_image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'your_uploaded_image.jpg')
-        if os.path.exists(uploaded_image_path):
-            img2 = cv2.imread(uploaded_image_path)  # The uploaded image for face swapping
-
-            # Perform face detection and swapping
-            faces1 = face_analysis.get(frame)
-            faces2 = face_analysis.get(img2)
-            
-            if len(faces1) > 0 and len(faces2) > 0:
-                frame = swapper.get(frame, faces1[0], faces2[0], paste_back=True)
-        
-        # Convert frame to JPEG for streaming
-        ret, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-
-        # Yield the frame in JPEG format
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-
-@app.route('/webcam_feed')
-def webcam_feed():
-    return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
+# Route to serve the main page (index.html)
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/process_frame', methods=['POST'])
+def process_frame():
+    # Get the uploaded frame
+    if 'frame' not in request.files:
+        return "No frame uploaded", 400
+
+    file = request.files['frame']
+    
+    # Read the frame data
+    in_memory_file = file.read()
+    nparr = np.frombuffer(in_memory_file, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+    if frame is None:
+        return "Invalid frame", 400
+
+    # Preprocess the frame
+    processed_frame = preprocess_frame(frame)
+
+    # Convert processed frame to bytes
+    _, buffer = cv2.imencode('.jpg', processed_frame)
+    img_bytes = buffer.tobytes()
+
+    # Send the processed frame back as a response
+    return send_file(
+        BytesIO(img_bytes),
+        mimetype='image/jpeg',
+        as_attachment=False,
+        download_name='processed_frame.jpg'
+    )
+
 if __name__ == '__main__':
-    # Make sure the upload folder exists
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
     app.run(debug=True)
