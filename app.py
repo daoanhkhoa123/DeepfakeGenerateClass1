@@ -55,4 +55,4 @@ def process_frame():
     })
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(port= 8012, debug=True)
