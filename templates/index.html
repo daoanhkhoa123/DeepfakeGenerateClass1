@@ -3,92 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Face Swap Web App</title>
-    <style>
-        #webcam {
-            width: 640px;
-            height: 480px;
-        }
-        #upload-btn {
-            margin-top: 20px;
-        }
-        #status {
-            margin-top: 10px;
-        }
-    </style>
+    <title>Face Swap Webcam Feed</title>
 </head>
 <body>
-    <h1>Face Swap Web App</h1>
+    <h1>Upload Image for Face Swap</h1>
+    <form method="POST" enctype="multipart/form-data" action="/upload">
+        <input type="file" name="file" accept="image/*">
+        <button type="submit">Upload</button>
+    </form>
 
-    <!-- Webcam Display -->
-    <video id="webcam" autoplay></video>
+    {% if filename %}
+        <h2>Uploaded Image:</h2>
+        <img src="{{ url_for('uploaded_file', filename=filename) }}" alt="Uploaded Image" width="300">
+    {% endif %}
 
-    <br>
-
-    <!-- Image Upload Form -->
-    <input type="file" id="upload" accept="image/*" />
-    <button id="upload-btn">Upload Image</button>
-
-    <div id="status"></div>
-
-    <script>
-        // Access webcam feed
-        const webcam = document.getElementById("webcam");
-        const uploadBtn = document.getElementById("upload-btn");
-        const uploadInput = document.getElementById("upload");
-        const statusDiv = document.getElementById("status");
-
-        // Start webcam
-        async function startWebcam() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            webcam.srcObject = stream;
-        }
-
-        startWebcam();
-
-        // Upload Image
-        uploadBtn.addEventListener("click", async () => {
-            const file = uploadInput.files[0];
-            if (!file) {
-                alert("Please select an image first!");
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('file', file);
-
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const result = await response.json();
-                if (result.error) {
-                    statusDiv.textContent = "Error: " + result.error;
-                } else {
-                    statusDiv.textContent = "Image uploaded and processed!";
-                }
-            } catch (error) {
-                statusDiv.textContent = "Error uploading image!";
-            }
-        });
-
-        // Function to continuously fetch webcam frames (to implement face swapping logic)
-        async function getWebcamFeed() {
-            try {
-                const response = await fetch('/webcam_feed');
-                const frameBlob = await response.blob();
-                const frameUrl = URL.createObjectURL(frameBlob);
-                webcam.src = frameUrl;
-            } catch (error) {
-                console.error("Error fetching webcam feed:", error);
-            }
-        }
-
-        // Fetch webcam feed periodically
-        setInterval(getWebcamFeed, 100);
-
-    </script>
+    <h1>Webcam Feed with Face Swap</h1>
+    <img src="{{ url_for('webcam_feed') }}" alt="Webcam Feed" width="640">
 </body>
 </html>
