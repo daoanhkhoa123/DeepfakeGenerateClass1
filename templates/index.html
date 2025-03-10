@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam Feed Processing</title>
+    <style>
+        video {
+            width: 100%;
+            max-width: 500px;
+            border: 2px solid #ccc;
+        }
+        #processedFrame {
+            width: 100%;
+            max-width: 500px;
+            display: block;
+            margin-top: 20px;
+            border: 2px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Webcam Feed with Image Processing</h1>
+
+    <div>
+        <h3>Webcam View:</h3>
+        <video id="webcam" autoplay></video>
+    </div>
+
+    <div>
+        <h3>Processed Frame:</h3>
+        <img id="processedFrame" src="" alt="Processed Frame">
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const processedFrame = document.getElementById('processedFrame');
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        let streaming = false;
+
+        // Set up the webcam stream
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                video.srcObject = stream;
+                video.onplay = () => { streaming = true; };
+            })
+            .catch(err => {
+                console.error("Error accessing webcam: ", err);
+            });
+
+        // Capture frame and send to the server for processing
+        function captureAndSendFrame() {
+            if (!streaming) return;
+
+            // Draw the current video frame to the canvas
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Convert canvas to image data (base64)
+            const frameData = canvas.toDataURL('image/jpeg');
+
+            // Send frame data to the server
+            fetch('/process_frame', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: frameData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Update the image with the processed frame
+                processedFrame.src = data.processed_image;
+            });
+
+            // Call captureAndSendFrame every 100ms (for smooth frame rate)
+            setTimeout(captureAndSendFrame, 100);
+        }
+
+        captureAndSendFrame(); // Start capturing frames
+    </script>
+
+</body>
+</html>
