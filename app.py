@@ -1,55 +1,58 @@
+import os
 import base64
-import cv2
 import numpy as np
-from flask import Flask, render_template, request, jsonify
-from io import BytesIO
+from flask import Flask, request, jsonify
 from PIL import Image
+import io
 import insightface
-from insightface.model_zoo import get_model
+from io import BytesIO
+import cv2
 
 app = Flask(__name__)
 
-# Initialize face analysis and the swapper model
+# Initialize InsightFace models
 face_analysis = insightface.app.FaceAnalysis(name='buffalo_l')
 face_analysis.prepare(ctx_id=0, det_size=(640, 640))
 
-swapper = get_model('inswapper_128.onnx', download=False, download_zip=False)
+swapper = insightface.model_zoo.get_model('inswapper_128.onnx',
+                                          download=False,
+                                          download_zip=False)
 
-# Route to serve the main page
-@app.route('/')
-def index():
-    return render_template('index.html')
+def process_image(image_data, uploaded_face_data=None):
+    # Convert base64 string to image
+    image_data = base64.b64decode(image_data.split(',')[1])  # Remove the data URL part
+    img1 = np.array(Image.open(BytesIO(image_data)))
 
-# Route to process webcam frame and swap face with the uploaded image
+    if uploaded_face_data:
+        # If an uploaded face image is provided
+        uploaded_face_data = base64.b64decode(uploaded_face_data.split(',')[1])
+        img2 = np.array(Image.open(BytesIO(uploaded_face_data)))
+
+        # Swap faces
+        img1_ = swapper.get(img1, face_analysis.get(img1)[0], face_analysis.get(img2)[0], paste_back=True)
+    else:
+        # If no uploaded face is provided, just return the original webcam frame
+        img1_ = img1
+
+    # Convert the processed image back to base64
+    _, buffer = cv2.imencode('.jpg', img1_)
+    processed_image = base64.b64encode(buffer).decode('utf-8')
+
+    return processed_image
+
 @app.route('/process_frame', methods=['POST'])
 def process_frame():
-    # Get the image data from the request
     data = request.get_json()
-    webcam_frame_data = data['image']
-    uploaded_face_data = data['uploaded_face']
 
-    # Decode the base64 string for the webcam frame and uploaded face
-    webcam_img_data = base64.b64decode(webcam_frame_data.split(',')[1])
-    uploaded_img_data = base64.b64decode(uploaded_face_data.split(',')[1])
+    webcam_frame = data['image']  # Webcam frame as base64 string
+    uploaded_face = data.get('uploaded_face')  # Uploaded face as base64 string (might be None)
 
-    # Convert to numpy arrays for OpenCV processing
-    np_arr_webcam = np.frombuffer(webcam_img_data, np.uint8)
-    webcam_img = cv2.imdecode(np_arr_webcam, cv2.IMREAD_COLOR)
-    
-    np_arr_uploaded = np.frombuffer(uploaded_img_data, np.uint8)
-    uploaded_img = cv2.imdecode(np_arr_uploaded, cv2.IMREAD_COLOR)
+    # Process the image by swapping faces or returning the original webcam frame
+    processed_image = process_image(webcam_frame, uploaded_face)
 
-    # Perform face swapping between the webcam image and the uploaded face
-    face1 = face_analysis.get(webcam_img)[0]
-    face2 = face_analysis.get(uploaded_img)[0]
-    swapped_img = swapper.get(webcam_img, face1, face2, paste_back=True)
+    return jsonify({
+        'processed_image': 'data:image/jpeg;base64,' + processed_image
+    })
 
-    # Encode the processed image back to base64
-    _, img_encoded = cv2.imencode('.jpg', swapped_img)
-    img_base64 = base64.b64encode(img_encoded).decode('utf-8')
-
-    # Return the processed image as a JSON response
-    return jsonify({'processed_image': 'data:image/jpeg;base64,' + img_base64})
-
-if __name__ == '__main__':
-    app.run(port=8012,debug=True)
+if __name__ == "__main__":
+    app.run(debug=True)
