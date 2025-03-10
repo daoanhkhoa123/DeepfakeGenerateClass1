@@ -52,4 +52,4 @@ def process_frame():
     return jsonify({'processed_image': 'data:image/jpeg;base64,' + img_base64})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(port=8012,debug=True)
