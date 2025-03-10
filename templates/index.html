@@ -83,7 +83,7 @@
             const webcamFrameData = canvas.toDataURL('image/jpeg');
 
             // Send both the webcam frame and uploaded face to the server for processing
-            fetch('/process_frame', {
+            fetch('http://localhost:8012/process_frame', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
