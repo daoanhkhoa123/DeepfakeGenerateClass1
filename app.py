@@ -40,7 +40,7 @@ def upload_image():
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# Function to generate frames for webcam feed
+# Function to generate frames for webcam feed with face swap
 def generate_frames():
     cap = cv2.VideoCapture(0)  # Open the default webcam
     while True:
@@ -48,15 +48,17 @@ def generate_frames():
         if not ret:
             break
         
-        # Load the uploaded image for face swapping
-        img2 = cv2.imread(os.path.join(app.config['UPLOAD_FOLDER'], 'your_uploaded_image.jpg'))  # Replace with actual filename from uploaded image
+        # Load the uploaded image for face swapping (if available)
+        uploaded_image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'your_uploaded_image.jpg')
+        if os.path.exists(uploaded_image_path):
+            img2 = cv2.imread(uploaded_image_path)  # The uploaded image for face swapping
 
-        # Perform face detection and swapping
-        faces1 = face_analysis.get(frame)
-        faces2 = face_analysis.get(img2)
-        
-        if len(faces1) > 0 and len(faces2) > 0:
-            frame = swapper.get(frame, faces1[0], faces2[0], paste_back=True)
+            # Perform face detection and swapping
+            faces1 = face_analysis.get(frame)
+            faces2 = face_analysis.get(img2)
+            
+            if len(faces1) > 0 and len(faces2) > 0:
+                frame = swapper.get(frame, faces1[0], faces2[0], paste_back=True)
         
         # Convert frame to JPEG for streaming
         ret, buffer = cv2.imencode('.jpg', frame)
