@@ -1,13 +1,13 @@
-import os
-import base64
+from flask import Flask, render_template, request, jsonify
+import cv2
 import numpy as np
-from flask import Flask, request, jsonify
+import insightface
+from werkzeug.utils import secure_filename
+import os
 from PIL import Image
 import io
-import insightface
-from io import BytesIO
-import cv2
 
+# Initialize Flask app
 app = Flask(__name__)
 
 # Initialize InsightFace models
@@ -16,41 +16,96 @@ face_analysis.prepare(ctx_id=0, det_size=(640, 640))
 
 swapper = insightface.model_zoo.get_model('inswapper_128.onnx', download=False, download_zip=False)
 
-def process_image(image_data, uploaded_face_data=None):
-    # Convert base64 string to image
-    image_data = base64.b64decode(image_data.split(',')[1])  # Remove the data URL part
-    img1 = np.array(Image.open(BytesIO(image_data)))
+# Set the folder for uploaded images
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
 
-    if uploaded_face_data:
-        # If an uploaded face image is provided
-        uploaded_face_data = base64.b64decode(uploaded_face_data.split(',')[1])
-        img2 = np.array(Image.open(BytesIO(uploaded_face_data)))
+# Helper function to check allowed file types
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-        # Swap faces
-        img1_ = swapper.get(img1, face_analysis.get(img1)[0], face_analysis.get(img2)[0], paste_back=True)
+# Route to upload image
+@app.route('/upload', methods=['POST'])
+def upload_image():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"})
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"})
+    
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+
+        # Load the uploaded image
+        img = Image.open(filepath)
+        img = np.array(img)
+
+        # Perform face analysis on the uploaded image
+        faces = face_analysis.get(img)
+        
+        if len(faces) > 0:
+            return jsonify({"message": "Image processed"})
+        else:
+            return jsonify({"error": "No face detected in the uploaded image"})
+    return jsonify({"error": "Invalid file"})
+
+# Serve the webcam feed and perform face swapping
+@app.route('/webcam_feed')
+def webcam_feed():
+    # Initialize the webcam
+    cap = cv2.VideoCapture(0)
+    
+    # Read a frame from the webcam
+    ret, frame = cap.read()
+    
+    if not ret:
+        cap.release()
+        return jsonify({"error": "Failed to capture video"})
+    
+    # Convert to RGB (since OpenCV uses BGR by default)
+    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    # Perform face analysis on the webcam frame
+    faces_webcam = face_analysis.get(frame_rgb)
+
+    # Check if faces are detected in the webcam frame
+    if len(faces_webcam) > 0:
+        # Load the uploaded image (use a sample uploaded image path or cache it from the last uploaded image)
+        uploaded_image_path = os.path.join(app.config['UPLOAD_FOLDER'], 'uploaded_image.jpg')
+        img2 = cv2.imread(uploaded_image_path)
+        img2_rgb = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+
+        # Perform face analysis on the uploaded image
+        faces_uploaded = face_analysis.get(img2_rgb)
+
+        if len(faces_uploaded) > 0:
+            # Swap faces using the first detected face from the webcam and the uploaded image
+            img1_ = swapper.get(frame_rgb, faces_uploaded[0], faces_webcam[0], paste_back=True)
+
+            # Convert the swapped image back to BGR for OpenCV display
+            img1_bgr = cv2.cvtColor(img1_, cv2.COLOR_RGB2BGR)
+
+            # Encode the frame as JPEG to return in the response
+            ret, jpeg = cv2.imencode('.jpg', img1_bgr)
+            if not ret:
+                cap.release()
+                return jsonify({"error": "Failed to encode video frame"})
+
+            # Release the webcam
+            cap.release()
+            return jpeg.tobytes()
+        else:
+            cap.release()
+            return jsonify({"error": "No face detected in the uploaded image"})
     else:
-        # If no uploaded face is provided, just return the original webcam frame
-        img1_ = img1
+        cap.release()
+        return jsonify({"error": "No face detected in the webcam frame"})
 
-    # Convert the processed image back to base64
-    _, buffer = cv2.imencode('.jpg', img1_)
-    processed_image = base64.b64encode(buffer).decode('utf-8')
-
-    return processed_image
-
-@app.route('/process_frame', methods=['POST'])
-def process_frame():
-    data = request.get_json()
-
-    webcam_frame = data['image']  # Webcam frame as base64 string
-    uploaded_face = data.get('uploaded_face')  # Uploaded face as base64 string (might be None)
-
-    # Process the image by swapping faces or returning the original webcam frame
-    processed_image = process_image(webcam_frame, uploaded_face)
-
-    return jsonify({
-        'processed_image': 'data:image/jpeg;base64,' + processed_image
-    })
-
-if __name__ == "__main__":
-    app.run(port=8012, debug=True)
+if __name__ == '__main__':
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+    app.run(port=8000,debug=True)
