@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Webcam Feed Processing</title>
+    <title>Webcam Face Swap</title>
     <style>
         video {
             width: 100%;
@@ -21,11 +21,16 @@
 </head>
 <body>
 
-    <h1>Webcam Feed with Image Processing</h1>
+    <h1>Webcam Face Swap</h1>
 
     <div>
         <h3>Webcam View:</h3>
         <video id="webcam" autoplay></video>
+    </div>
+
+    <div>
+        <h3>Upload Face Image:</h3>
+        <input type="file" id="uploadFace" accept="image/*" />
     </div>
 
     <div>
@@ -36,9 +41,11 @@
     <script>
         const video = document.getElementById('webcam');
         const processedFrame = document.getElementById('processedFrame');
+        const uploadFace = document.getElementById('uploadFace');
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         let streaming = false;
+        let uploadedFaceData = null;
 
         // Set up the webcam stream
         navigator.mediaDevices.getUserMedia({ video: true })
@@ -52,7 +59,7 @@
 
         // Capture frame and send to the server for processing
         function captureAndSendFrame() {
-            if (!streaming) return;
+            if (!streaming || !uploadedFaceData) return;
 
             // Draw the current video frame to the canvas
             canvas.width = video.videoWidth;
@@ -60,15 +67,18 @@
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
             // Convert canvas to image data (base64)
-            const frameData = canvas.toDataURL('image/jpeg');
+            const webcamFrameData = canvas.toDataURL('image/jpeg');
 
-            // Send frame data to the server
+            // Send both the webcam frame and uploaded face to the server for processing
             fetch('/process_frame', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ image: frameData })
+                body: JSON.stringify({
+                    image: webcamFrameData,
+                    uploaded_face: uploadedFaceData
+                })
             })
             .then(response => response.json())
             .then(data => {
@@ -80,7 +90,18 @@
             setTimeout(captureAndSendFrame, 100);
         }
 
-        captureAndSendFrame(); // Start capturing frames
+        // Handle face image upload
+        uploadFace.addEventListener('change', event => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                uploadedFaceData = reader.result;
+                captureAndSendFrame();  // Start face swapping once an image is uploaded
+            };
+            reader.readAsDataURL(file);
+        });
     </script>
 
 </body>
